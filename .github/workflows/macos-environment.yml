@@ -1,0 +1,54 @@
+name: macOS development environment
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  environment:
+    name: Verify Apple development toolchain
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: macOS information
+        run: |
+          sw_vers
+          uname -m
+
+      - name: Xcode version
+        run: |
+          xcodebuild -version
+          xcode-select -p
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Apple command line tools
+        run: xcrun --version
+
+      - name: XcodeGen installation
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Swift compile test
+        run: |
+          test_dir="$(mktemp -d "$RUNNER_TEMP/wristwords-swift.XXXXXX")"
+          trap 'rm -rf "$test_dir"' EXIT
+          printf '%s\n' 'print("WristWords macOS build environment is ready.")' > "$test_dir/hello.swift"
+          swiftc "$test_dir/hello.swift" -o "$test_dir/hello"
+          output="$("$test_dir/hello")"
+          printf '%s\n' "$output"
+          test "$output" = "WristWords macOS build environment is ready."

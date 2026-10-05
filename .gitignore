@@ -1,0 +1,11 @@
+# macOS and Windows metadata
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local Xcode and Swift build output
+DerivedData/
+.build/
+build/
+xcuserdata/
+*.xcuserstate
