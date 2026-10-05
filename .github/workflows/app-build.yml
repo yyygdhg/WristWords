@@ -1,0 +1,133 @@
+name: iOS and watchOS build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Generate and build app skeleton
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Apple development environment
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          swift --version
+          xcode-select -p
+          xcrun --version
+          xcodebuild -showsdks
+
+      - name: XcodeGen installation
+        run: |
+          if ! command -v xcodegen >/dev/null 2>&1; then
+            brew install xcodegen
+          fi
+          xcodegen --version
+
+      - name: Generate and regenerate Xcode project
+        run: |
+          test ! -e WristWords.xcodeproj
+          xcodegen generate
+          cp -R WristWords.xcodeproj "$RUNNER_TEMP/first-generation.xcodeproj"
+          rm -rf WristWords.xcodeproj
+          xcodegen generate
+          diff -r "$RUNNER_TEMP/first-generation.xcodeproj" WristWords.xcodeproj
+          xcodebuild -list -project WristWords.xcodeproj
+
+      - name: Verify target configuration
+        run: |
+          plutil -convert json -o "$RUNNER_TEMP/project.json" WristWords.xcodeproj/project.pbxproj
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          objects = json.loads((Path(os.environ["RUNNER_TEMP"]) / "project.json").read_text())["objects"]
+          targets = {o["name"]: o for o in objects.values() if o.get("isa") == "PBXNativeTarget"}
+          assert set(targets) == {"WristWords", "WristWordsWatch"}, targets
+          expected = {
+              "WristWords": ("iphoneos", "com.example.WristWords", "IPHONEOS_DEPLOYMENT_TARGET", "17.0"),
+              "WristWordsWatch": ("watchos", "com.example.WristWords.watchkitapp", "WATCHOS_DEPLOYMENT_TARGET", "10.0"),
+          }
+          for name, (sdk, bundle_id, deployment_key, minimum) in expected.items():
+              target = targets[name]
+              assert target["productType"] == "com.apple.product-type.application", target
+              for config_id in objects[target["buildConfigurationList"]]["buildConfigurations"]:
+                  settings = objects[config_id]["buildSettings"]
+                  assert settings["SDKROOT"] == sdk, settings
+                  assert settings["PRODUCT_BUNDLE_IDENTIFIER"] == bundle_id, settings
+                  assert settings[deployment_key] == minimum, settings
+              scheme = Path("WristWords.xcodeproj/xcshareddata/xcschemes") / f"{name}.xcscheme"
+              assert scheme.is_file(), scheme
+              print(f"PASS: {name}, {sdk}, {bundle_id}, minimum OS {minimum}, shared scheme")
+          PY
+
+      - name: iOS Debug build
+        run: |
+          xcodebuild build \
+            -project WristWords.xcodeproj \
+            -scheme WristWords \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/WristWords-iOS" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: watchOS Debug build
+        run: |
+          xcodebuild build \
+            -project WristWords.xcodeproj \
+            -scheme WristWordsWatch \
+            -configuration Debug \
+            -sdk watchsimulator \
+            -destination 'generic/platform=watchOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/WristWords-watchOS" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Verify app bundles and companion relationship
+        run: |
+          python3 - <<'PY'
+          import os
+          import plistlib
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"])
+          phone = root / "WristWords-iOS/Build/Products/Debug-iphonesimulator/WristWords.app"
+          watch = root / "WristWords-watchOS/Build/Products/Debug-watchsimulator/WristWordsWatch.app"
+          embedded = phone / "PlugIns/WristWordsWatch.app"
+          for app, bundle_id, platform in [
+              (phone, "com.example.WristWords", "iPhoneSimulator"),
+              (watch, "com.example.WristWords.watchkitapp", "WatchSimulator"),
+              (embedded, "com.example.WristWords.watchkitapp", "WatchSimulator"),
+          ]:
+              with (app / "Info.plist").open("rb") as stream:
+                  info = plistlib.load(stream)
+              assert info["CFBundleIdentifier"] == bundle_id, info
+              assert platform in info["CFBundleSupportedPlatforms"], info
+              assert (app / info["CFBundleExecutable"]).is_file(), app
+              assert not (app / "_CodeSignature").exists(), app
+              if platform == "WatchSimulator":
+                  assert info["WKApplication"] is True, info
+                  assert info["WKCompanionAppBundleIdentifier"] == "com.example.WristWords", info
+              print(f"PASS: unsigned {platform} app bundle {bundle_id}")
+          PY
+
+      - name: Verify clean checkout after builds
+        run: |
+          git status --short
+          test -z "$(git status --porcelain)"
