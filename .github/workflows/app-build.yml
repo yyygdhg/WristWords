@@ -90,7 +90,6 @@ jobs:
             -project WristWords.xcodeproj \
             -scheme WristWords \
             -configuration Debug \
-            -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/WristWords-iOS" \
             CODE_SIGNING_ALLOWED=NO
@@ -101,7 +100,6 @@ jobs:
             -project WristWords.xcodeproj \
             -scheme WristWordsWatch \
             -configuration Debug \
-            -sdk watchsimulator \
             -destination 'generic/platform=watchOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/WristWords-watchOS" \
             CODE_SIGNING_ALLOWED=NO

@@ -46,13 +46,13 @@ xcodebuild -list -project WristWords.xcodeproj
 
 # iPhone Simulator Debug build（也构建并嵌入 Watch App）
 xcodebuild build -project WristWords.xcodeproj -scheme WristWords \
-  -configuration Debug -sdk iphonesimulator \
+  -configuration Debug \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath build/iOS CODE_SIGNING_ALLOWED=NO
 
 # 独立验证 Watch Simulator Debug build
 xcodebuild build -project WristWords.xcodeproj -scheme WristWordsWatch \
-  -configuration Debug -sdk watchsimulator \
+  -configuration Debug \
   -destination 'generic/platform=watchOS Simulator' \
   -derivedDataPath build/watchOS CODE_SIGNING_ALLOWED=NO
 ```
