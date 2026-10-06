@@ -16,21 +16,21 @@ OUTPUT.mkdir(parents=True, exist_ok=True)
 REPORT = {"status": "running", "apps": {}}
 
 
-def command(*args, timeout=120, show_output=True):
+def command(*args, timeout=120, show_output=True, stream=False):
     print("+ " + " ".join(map(str, args)), flush=True)
     result = subprocess.run(
-        list(map(str, args)), capture_output=True, text=True, timeout=timeout
+        list(map(str, args)), capture_output=not stream, text=True, timeout=timeout
     )
     if result.stdout and show_output:
         print(result.stdout, end="", flush=True)
     if result.stderr:
         print(result.stderr, end="", file=sys.stderr, flush=True)
     result.check_returncode()
-    return result.stdout.strip()
+    return (result.stdout or "").strip()
 
 
-def simctl(*args, timeout=120, show_output=True):
-    return command("xcrun", "simctl", *args, timeout=timeout, show_output=show_output)
+def simctl(*args, timeout=120, show_output=True, stream=False):
+    return command("xcrun", "simctl", *args, timeout=timeout, show_output=show_output, stream=stream)
 
 
 def version(value):
@@ -100,7 +100,11 @@ def validate_app(label, device, app):
         "status": "booting", "device": device["name"], "udid": device["udid"],
         "runtime": device["runtime"]["name"], "bundleIdentifier": bundle_id,
     }
-    simctl("bootstatus", device["udid"], "-b", timeout=360)
+    if device["state"] != "Booted":
+        simctl("boot", device["udid"], timeout=120, stream=True)
+    developer_dir = Path(command("xcode-select", "-p"))
+    command("open", "-a", developer_dir / "Applications/Simulator.app")
+    simctl("bootstatus", device["udid"], "-b", timeout=360, stream=True)
     REPORT["apps"][label]["status"] = "installing"
     simctl("install", device["udid"], app, timeout=180)
     # Prove installation separately from the launch return value.
