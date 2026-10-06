@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    name: Generate and build app skeleton
+    name: Build apps and test study session
     runs-on: macos-latest
     timeout-minutes: 30
     defaults:
@@ -65,7 +65,7 @@ jobs:
               for key in objects[project["buildConfigurationList"]]["buildConfigurations"]
           }
           targets = {o["name"]: o for o in objects.values() if o.get("isa") == "PBXNativeTarget"}
-          assert set(targets) == {"WristWords", "WristWordsWatch"}, targets
+          assert set(targets) == {"WristWords", "WristWordsWatch", "WristWordsCoreTests"}, targets
           expected = {
               "WristWords": ("iphoneos", "com.example.WristWords", "IPHONEOS_DEPLOYMENT_TARGET", "17.0"),
               "WristWordsWatch": ("watchos", "com.example.WristWords.watchkitapp", "WATCHOS_DEPLOYMENT_TARGET", "10.0"),
@@ -82,7 +82,20 @@ jobs:
               scheme = Path("WristWords.xcodeproj/xcshareddata/xcschemes") / f"{name}.xcscheme"
               assert scheme.is_file(), scheme
               print(f"PASS: {name}, {sdk}, {bundle_id}, minimum OS {minimum}, shared scheme")
+          assert targets["WristWordsCoreTests"]["productType"] == "com.apple.product-type.bundle.unit-test"
+          assert Path("WristWords.xcodeproj/xcshareddata/xcschemes/WristWordsCoreTests.xcscheme").is_file()
           PY
+
+      - name: Core study session tests
+        run: |
+          xcodebuild test \
+            -project WristWords.xcodeproj \
+            -scheme WristWordsCoreTests \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/WristWords-tests" \
+            -resultBundlePath "$RUNNER_TEMP/StudySessionTests.xcresult" \
+            CODE_SIGNING_ALLOWED=NO
 
       - name: iOS Debug build
         run: |
