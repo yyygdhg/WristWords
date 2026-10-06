@@ -7,6 +7,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -18,15 +19,25 @@ REPORT = {"status": "running", "apps": {}}
 
 def command(*args, timeout=120, show_output=True, stream=False):
     print("+ " + " ".join(map(str, args)), flush=True)
-    result = subprocess.run(
-        list(map(str, args)), capture_output=not stream, text=True, timeout=timeout
-    )
-    if result.stdout and show_output:
-        print(result.stdout, end="", flush=True)
-    if result.stderr:
-        print(result.stderr, end="", file=sys.stderr, flush=True)
-    result.check_returncode()
-    return (result.stdout or "").strip()
+    argv = list(map(str, args))
+    if stream:
+        subprocess.run(argv, check=True, timeout=timeout)
+        return ""
+    # Simulator descendants may inherit output descriptors. Regular files avoid
+    # waiting for pipe EOF after the command itself has already exited.
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stdout, tempfile.TemporaryFile(mode="w+", encoding="utf-8") as stderr:
+        try:
+            result = subprocess.run(argv, stdout=stdout, stderr=stderr, timeout=timeout)
+        finally:
+            stdout.seek(0)
+            stderr.seek(0)
+            output, errors = stdout.read(), stderr.read()
+            if output and show_output:
+                print(output, end="", flush=True)
+            if errors:
+                print(errors, end="", file=sys.stderr, flush=True)
+        result.check_returncode()
+        return output.strip()
 
 
 def simctl(*args, timeout=120, show_output=True, stream=False):
@@ -103,7 +114,7 @@ def validate_app(label, device, app):
     if device["state"] != "Booted":
         simctl("boot", device["udid"], timeout=120, stream=True)
     developer_dir = Path(command("xcode-select", "-p"))
-    command("open", "-a", developer_dir / "Applications/Simulator.app")
+    command("open", "-a", developer_dir / "Applications/Simulator.app", stream=True)
     simctl("bootstatus", device["udid"], "-b", timeout=360, stream=True)
     REPORT["apps"][label]["status"] = "installing"
     simctl("install", device["udid"], app, timeout=180)
