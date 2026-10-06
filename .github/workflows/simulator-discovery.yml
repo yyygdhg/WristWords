@@ -1,0 +1,26 @@
+name: Simulator discovery
+
+on:
+  push:
+    branches:
+      - ci/stage4-runtime-validation
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    runs-on: macos-latest
+    timeout-minutes: 10
+    steps:
+      - name: Actual Xcode and Simulator inventory
+        run: |
+          xcodebuild -version
+          xcode-select -p
+          xcrun simctl list runtimes --json
+          xcrun simctl list devices available --json
+          xcrun simctl list pairs --json
+          xcrun simctl help launch
+          xcrun simctl help bootstatus
+          xcrun simctl help pair
+          xcrun simctl help io
