@@ -3,6 +3,7 @@
 - Stage 1 — macOS CI environment
 - Stage 2 — iOS + watchOS project skeleton
 - Stage 3 — local vocabulary review MVP
+- Stage 4 — Simulator runtime validation
 
 ```text
 Windows
@@ -83,4 +84,17 @@ CI 删除首次生成的工程并重新生成，比较两次结果，运行核�
 
 8 个核心测试覆盖：初始单词、三种评价记录与前进、完整流程及评价顺序、完成后不再记录、完成后 Restart、途中 Restart、空 Session、不同 Session 状态独立。
 
-当前自动验证范围为工程生成、核心逻辑测试和未签名 Simulator 编译；尚未进行 UI 点击自动化、真机运行、签名或发布验证。
+## Simulator 运行验证
+
+`app-build.yml` 保留工程重复生成、8 个核心测试、两个 Simulator Build、companion 检查和干净 checkout 检查，再执行 `scripts/simulator_smoke.py`。
+
+- 使用当前 Xcode 的 `simctl list --json` 查询实际安装的 Runtime、可用设备和配对信息。
+- 根据构建产物的最低系统版本动态选择可用配对，优先选择较新的已安装 Runtime；不绑定型号、UDID 或 Xcode 安装路径。
+- 分别用 `simctl bootstatus -b` 等待启动、`install` 安装、`get_app_container` 确认安装、`launch` 启动 iPhone 和 Watch App。
+- 两个 App 各观察 20 秒，检查原始启动 PID 仍是对应的 App 进程，并检查本次新生成的 App crash report。
+- 使用 `simctl io screenshot` 捕获两个实际屏幕；不修改 Stage 3 UI。
+- 将 `iphone.png`、`watch.png`、Runtime/设备信息、运行报告及 App stdout/stderr 上传到 `simulator-runtime-<run id>-<attempt>` Artifact，保留 14 天。失败时也保留已产生的证据，Smoke Test 的错误不会被忽略。
+
+在 GitHub Actions Run 页面底部的 **Artifacts** 下载截图，即可在 Windows 查看。
+
+当前验证覆盖安装、启动和短时间运行，并提供初始页面截图供查看；尚未自动点击 Watch 评价按钮，也未验证长时间稳定性、真机运行、签名或发布。
