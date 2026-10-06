@@ -20,6 +20,7 @@ targets:
     sources:
       - WristWords/App
       - WristWords/Resources
+      - Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.WristWords
@@ -49,6 +50,7 @@ targets:
     sources:
       - WristWordsWatch/App
       - WristWordsWatch/Resources
+      - Shared
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.WristWords.watchkitapp
@@ -63,6 +65,20 @@ targets:
         WKCompanionAppBundleIdentifier: com.example.WristWords
         WKRunsIndependentlyOfCompanionApp: true
 
+  WristWordsCoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - Shared
+      - Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.WristWords.coretests
+    info:
+      path: .generated/WristWordsCoreTests-Info.plist
+      properties: {}
+
 schemes:
   WristWords:
     build:
@@ -76,3 +92,11 @@ schemes:
         WristWordsWatch: all
     run:
       config: Debug
+  WristWordsCoreTests:
+    build:
+      targets:
+        WristWordsCoreTests: [test]
+    test:
+      config: Debug
+      targets:
+        - WristWordsCoreTests
