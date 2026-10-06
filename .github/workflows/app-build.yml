@@ -149,3 +149,21 @@ jobs:
         run: |
           git status --short
           test -z "$(git status --porcelain)"
+
+      - name: Simulator runtime smoke test
+        timeout-minutes: 15
+        run: python3 scripts/simulator_smoke.py
+
+      - name: Upload Simulator screenshots and runtime evidence
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: simulator-runtime-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/simulator-runtime/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Verify clean checkout after runtime validation
+        run: |
+          git status --short
+          test -z "$(git status --porcelain)"
