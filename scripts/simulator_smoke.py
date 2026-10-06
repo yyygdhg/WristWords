@@ -148,7 +148,9 @@ def main():
     phone, watch, pair_id = select_pair(inventory, phone_info["MinimumOSVersion"], watch_info["MinimumOSVersion"])
     REPORT["pairID"] = pair_id
     print(f"Selected {phone['name']} ({phone['runtime']['name']}) + {watch['name']} ({watch['runtime']['name']})", flush=True)
-    simctl("pair_activate", pair_id)
+    pairs = json.loads(simctl("list", "pairs", "--json", show_output=False))["pairs"]
+    if re.search(r"\bactive\b", pairs[pair_id].get("state", "")) is None:
+        simctl("pair_activate", pair_id)
     validate_app("iphone", phone, phone_app)
     validate_app("watch", watch, watch_app)
     REPORT["status"] = "passed"
