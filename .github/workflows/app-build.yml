@@ -154,6 +154,10 @@ jobs:
         timeout-minutes: 15
         run: python3 scripts/simulator_smoke.py
 
+      - name: WatchConnectivity Simulator probe
+        timeout-minutes: 4
+        run: python3 scripts/simulator_sync_smoke.py
+
       - name: Upload Simulator screenshots and runtime evidence
         if: ${{ always() && !cancelled() }}
         uses: actions/upload-artifact@v7

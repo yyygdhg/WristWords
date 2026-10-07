@@ -5,6 +5,7 @@
 - Stage 3 — local vocabulary review MVP
 - Stage 4 — Simulator runtime validation
 - Stage 5 — MaiMemo API integration
+- Stage 6 — iPhone to Watch vocabulary sync
 
 ```text
 Windows
@@ -137,3 +138,29 @@ Keychain 不可用时显示错误，不退回明文存储；仍可输入凭证�
 - Keychain 流程的单元测试使用内存 Stub；iPhone 编译使用系统 Security 框架的真实 Keychain 实现。
 - CI 继续从干净 checkout 生成工程、执行测试、编译两端、检查 companion、实际安装/启动 Simulator 并截图，始终使用 Mock。Artifact 仅包含 CI 的 Mock 画面及运行证据。
 - 真实请求成功、账号权限、个人释义内容和本机 Keychain 行为需要用户手动粘贴凭证后最终验证；当前自动测试不等于真实 API 已验证成功。
+
+## iPhone → Watch 单向词汇同步
+
+点击 iPhone 的 **Send to Apple Watch**，发送页面当前已经加载的 `[VocabularyWord]`；来源可以是 Mock 或 MaiMemo API，Watch 不需要知道来源。加载中或请求失败时不发送列表。
+
+### 传输与生命周期
+
+- 使用 Apple 官方 [WatchConnectivity](https://developer.apple.com/documentation/watchconnectivity/wcsession) 的 `updateApplicationContext`，传送完整的最新词汇快照。系统替换尚未投递的旧快照并安排后台传输，不要求 Watch 当前可达或保持前台。
+- 快照用 Codable JSON 编码为 Data，放入 property-list 兼容的 context。只包含 `version`、`transferID` 以及单词的 `id`、`term`、`phonetic`、`meaning`；没有 Token、Keychain、Authorization Header 或数据源对象。
+- iPhone 等待 WCSession 激活，并检查配对及 Watch App 安装状态。成功提交只显示“已提交，等待 Watch 接收”，不冒充已经送达；没有 Watch 或提交失败显示简单反馈。
+- Watch 在 App 初始化时激活并保留 WCSession delegate，在激活后读取 `receivedApplicationContext`，并处理新 context 的 delegate 回调。解码与界面状态更新在主线程完成。
+- 每次新的有效快照重新创建 StudySession，从 `1 / N` 开始；相同 transferID 的重复投递不会重置已有进度。评价、完成和 Restart 保留。
+- 尚无同步数据时使用原有 Mock fallback。有效空列表显示等待新单词；无效 JSON、字段、重复 ID 或未知格式保留当前 Session，不 Crash。
+- 不自行持久化单词或评价，只利用系统的最新 received context 在后续启动时恢复词汇列表。学习进度仍在内存中。
+
+### CI 验证及真机边界
+
+46 个测试保留 Stage 5 的全部 30 个测试，新增单词/快照编码、多个字段及 Unicode、property-list 传输、空列表、无效 payload、字段白名单、Watch Session 创建、重复投递、数据替换与背词 Restart 测试。
+
+现有 XcodeGen、两端 Build、companion、Runtime 和干净 checkout 验证继续保留。额外的 `simulator_sync_smoke.py` 在已经启动的配对 Simulator 中重新启动两端，iPhone 通过同一发送方法传送**顺序反转的 5 个 Mock 单词**，Watch 必须通过真实 WCSession 接收；脚本不直接给 Watch 注入词汇。
+
+此探测只在 Debug Simulator 且带 `--wristwords-sync-smoke` 参数时启用，不进行 API 请求。它比较两端的 transferID、数量和首词 ID，生成 `sync-runtime-report.json`、`iphone-sync.png` 与 `watch-sync.png`，一并上传已有 Runtime Artifact；报告与截图仅包含 CI Mock 数据。
+
+若 Simulator 未激活配对传输或在 90 秒内没有投递，报告明确写 `not-verified`；基础 Runtime 和自动测试仍必须通过。收到错误内容、payload 被拒绝或 App 退出会让 CI 失败，不伪造成功。Apple 的[官方示例](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)要求使用实体 iPhone 和 Watch 测试，因此后台、断连后延迟投递和设备重启仍需真机验证。
+
+本阶段没有 Watch → iPhone 评价回传、凭证同步、Watch API 请求、历史数据库、正式 OAuth、签名或发布。

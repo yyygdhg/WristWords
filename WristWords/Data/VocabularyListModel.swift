@@ -21,9 +21,9 @@ final class VocabularyListModel: ObservableObject {
         self.makeAPI = makeAPI
     }
 
-    func start() async {
+    func start(source: any VocabularySource = MockVocabularySource()) async {
         refreshSavedTokenStatus()
-        await useMock()
+        await load(source, sourceName: "Mock")
     }
 
     func useMock() async {

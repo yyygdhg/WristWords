@@ -1,16 +1,23 @@
 import SwiftUI
 
+@MainActor
 struct ReviewView: View {
-    @State private var session = StudySession(words: MockVocabulary.words)
+    @ObservedObject var model: WatchStudyModel
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
-                if let word = session.currentWord {
-                    Text("\(session.completedCount + 1) / \(session.totalCount)")
+                Text("Source: \(model.sourceName)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                if let message = model.syncMessage {
+                    Text(message).font(.caption)
+                }
+                if let word = model.session.currentWord {
+                    Text("\(model.session.completedCount + 1) / \(model.session.totalCount)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .accessibilityLabel("第 \(session.completedCount + 1) 个，共 \(session.totalCount) 个单词")
+                        .accessibilityLabel("第 \(model.session.completedCount + 1) 个，共 \(model.session.totalCount) 个单词")
 
                     VStack(spacing: 6) {
                         Text(word.term)
@@ -27,19 +34,22 @@ struct ReviewView: View {
 
                     ForEach(StudyRating.allCases) { rating in
                         Button(rating.rawValue) {
-                            session.rateCurrentWord(rating)
+                            model.rate(rating)
                         }
                         .accessibilityLabel(rating.rawValue)
                     }
+                } else if model.session.totalCount == 0 {
+                    Text("暂无单词，请从 iPhone 同步。")
+                        .multilineTextAlignment(.center)
                 } else {
                     Text("Review Complete")
                         .font(.headline)
                         .multilineTextAlignment(.center)
-                    Text("\(session.completedCount) / \(session.totalCount)")
+                    Text("\(model.session.completedCount) / \(model.session.totalCount)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Restart") {
-                        session.restart()
+                        model.restart()
                     }
                 }
             }
@@ -48,6 +58,6 @@ struct ReviewView: View {
             .padding(.vertical, 4)
         }
         // Return to the top for each word and after Restart on small screens.
-        .id(session.completedCount)
+        .id("\(model.receivedTransferID?.uuidString ?? "mock")-\(model.session.completedCount)")
     }
 }
