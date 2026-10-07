@@ -19,6 +19,8 @@ targets:
     platform: iOS
     sources:
       - WristWords/App
+      - WristWords/Data
+      - WristWords/Credentials
       - WristWords/Resources
       - Shared
     settings:
@@ -71,6 +73,7 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - Shared
+      - WristWords/Data
       - Tests
     settings:
       base:

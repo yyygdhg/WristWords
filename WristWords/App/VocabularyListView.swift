@@ -1,30 +1,70 @@
 import SwiftUI
 
+@MainActor
 struct VocabularyListView: View {
-    private let words = MockVocabulary.words
+    @StateObject private var model = VocabularyListModel(tokenStore: KeychainTokenStore())
+    @State private var tokenInput = ""
 
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    Text("本地测试单词：\(words.count) 个")
+                Section("数据来源") {
+                    Text("Data Source: \(model.sourceName)")
+                    Text("Loaded: \(model.words.count) words")
+                    if model.isLoading { ProgressView("正在加载…") }
+                    if let error = model.errorMessage {
+                        Text(error).foregroundStyle(.red)
+                    }
+                    Button("使用 Mock 数据") {
+                        Task { await model.useMock() }
+                    }
+                    .disabled(model.isLoading)
                 }
 
-                Section("Mock 单词") {
-                    ForEach(words) { word in
+                Section("开发阶段 · 墨墨 API") {
+                    DisclosureGroup("请求凭证（仅本机）") {
+                        SecureField("粘贴原始请求凭证", text: $tokenInput)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .privacySensitive()
+                            .disabled(model.isLoading)
+                        Text(model.hasSavedToken ? "已有本机 Keychain 凭证" : "尚未保存凭证")
+                            .font(.caption)
+                        Button("保存到 Keychain") {
+                            if model.saveToken(tokenInput) { tokenInput = "" }
+                        }
+                        .disabled(model.isLoading)
+                        Button("删除已保存凭证", role: .destructive) {
+                            model.deleteToken()
+                            tokenInput = ""
+                        }
+                        .disabled(model.isLoading)
+                        if let message = model.credentialMessage {
+                            Text(message).font(.caption)
+                        }
+                    }
+                    Button("Test Connection / 加载真实数据") {
+                        Task { await model.testConnection(tokenInput: tokenInput) }
+                    }
+                    .disabled(model.isLoading)
+                }
+
+                Section("单词") {
+                    ForEach(model.words) { word in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(word.term)
                                 .font(.headline)
-                            Text(word.phonetic)
+                            Text(word.phonetic.isEmpty ? "官方 API 未提供音标" : word.phonetic)
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
-                            Text(word.meaning)
+                            Text(word.meaning.isEmpty ? "暂无个人释义" : word.meaning)
                         }
                         .padding(.vertical, 4)
                     }
                 }
             }
             .navigationTitle("WristWords")
+            .task { await model.start() }
         }
     }
 }
