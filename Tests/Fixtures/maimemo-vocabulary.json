@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "data": {
+    "voc": [
+      {"id": "fixture-voc-apple", "spelling": "apple"},
+      {"id": "fixture-voc-maintain", "spelling": "maintain"}
+    ]
+  },
+  "errors": []
+}
