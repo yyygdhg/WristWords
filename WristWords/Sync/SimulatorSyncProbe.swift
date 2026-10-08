@@ -1,5 +1,6 @@
 #if DEBUG && targetEnvironment(simulator)
 import Foundation
+import WatchConnectivity
 
 // A bounded CI-only probe. No token, API request or direct Watch data injection.
 enum SimulatorSyncProbe {
@@ -28,6 +29,14 @@ enum SimulatorSyncProbe {
         }
         if report.isEmpty {
             report = ["status": "unavailable", "reason": sender.failureReason]
+        }
+        if WCSession.isSupported() {
+            let session = WCSession.default
+            report["activationState"] = session.activationState.rawValue
+            if session.activationState == .activated {
+                report["isPaired"] = session.isPaired
+                report["isWatchAppInstalled"] = session.isWatchAppInstalled
+            }
         }
         let file = URL.documentsDirectory.appending(path: "phone-sync-probe.json")
         do {

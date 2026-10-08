@@ -161,6 +161,8 @@ Keychain 不可用时显示错误，不退回明文存储；仍可输入凭证�
 
 此探测只在 Debug Simulator 且带 `--wristwords-sync-smoke` 参数时启用，不进行 API 请求。它比较两端的 transferID、数量和首词 ID，生成 `sync-runtime-report.json`、`iphone-sync.png` 与 `watch-sync.png`，一并上传已有 Runtime Artifact；报告与截图仅包含 CI Mock 数据。
 
+首次 Runner 实测：46 个测试及两端 Build、安装、启动均通过；WCSession 报告 `isWatchAppInstalled = false`，所以**没有实际验证跨设备投递**，同步报告为 `not-verified`。此结果不计为同步 PASS；仍需实体配对设备验证。探测保留原生配对/安装检查，不修改 Simulator 注册数据库或注入 Watch 数据。
+
 若 Simulator 未激活配对传输或在 90 秒内没有投递，报告明确写 `not-verified`；基础 Runtime 和自动测试仍必须通过。收到错误内容、payload 被拒绝或 App 退出会让 CI 失败，不伪造成功。Apple 的[官方示例](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)要求使用实体 iPhone 和 Watch 测试，因此后台、断连后延迟投递和设备重启仍需真机验证。
 
 本阶段没有 Watch → iPhone 评价回传、凭证同步、Watch API 请求、历史数据库、正式 OAuth、签名或发布。

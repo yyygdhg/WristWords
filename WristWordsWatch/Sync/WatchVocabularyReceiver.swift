@@ -42,6 +42,22 @@ final class WatchVocabularyReceiver: NSObject, WCSessionDelegate {
         error: Error?
     ) {
         guard activationState == .activated && error == nil else { return }
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--wristwords-sync-smoke") {
+            let report: [String: Any] = [
+                "activationState": activationState.rawValue,
+                "isCompanionAppInstalled": session.isCompanionAppInstalled,
+            ]
+            let file = URL.documentsDirectory.appending(path: "watch-session-probe.json")
+            do {
+                try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                let data = try JSONSerialization.data(withJSONObject: report)
+                try data.write(to: file, options: .atomic)
+            } catch {
+                print("CI Watch session probe could not write its report.")
+            }
+        }
+        #endif
         let context = session.receivedApplicationContext
         Task { @MainActor [weak self] in self?.receive(context) }
     }

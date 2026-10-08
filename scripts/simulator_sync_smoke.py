@@ -1,6 +1,7 @@
 """Probe real WatchConnectivity using only the CI's reordered Mock vocabulary."""
 
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -50,6 +51,9 @@ def main(report):
     if sent is None:
         raise RuntimeError("The iPhone CI probe did not report completion")
     report["phone"] = sent
+    activation_file = files["watch"].with_name("watch-session-probe.json")
+    if activation_file.is_file():
+        report["watchSession"] = read_report(activation_file)
     if sent["status"] == "unavailable":
         if sent["reason"] == "invalid-payload":
             raise RuntimeError("The iPhone rejected the CI vocabulary payload")
@@ -69,6 +73,12 @@ def main(report):
     for label, app in [("iphone", phone), ("watch", watch)]:
         simctl("io", app["udid"], "screenshot", OUTPUT / (label + "-sync.png"))
     print("WatchConnectivity Simulator probe: " + report["status"] + " — " + report["reason"], flush=True)
+    if report["status"] == "not-verified":
+        print("::warning::WatchConnectivity delivery was not verified on Simulator; paired physical devices are still required.", flush=True)
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with Path(summary).open("a", encoding="utf-8") as stream:
+            stream.write("\nWatchConnectivity Simulator: **" + report["status"] + "** — " + report["reason"] + ".\n")
 
 
 if __name__ == "__main__":
