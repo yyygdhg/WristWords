@@ -79,14 +79,17 @@ def select_pair(inventory, phone_minimum, watch_minimum):
         if phone and watch and "unavailable" not in pair.get("state", ""):
             compatible.append((phone, watch, pair_id))
     if compatible:
-        return max(compatible, key=lambda pair: (
+        # The newest installed runtime can have slow/stalled first-boot data
+        # migrations on hosted runners. Prefer an earlier compatible installed
+        # pair; Xcode/SDK builds still use the runner's current toolchain.
+        return min(compatible, key=lambda pair: (
             version(pair[1]["runtime"]["version"]),
             version(pair[0]["runtime"]["version"]),
             pair[1]["name"],
         ))
 
     # No usable preconfigured pair: let simctl validate an installed matching pair.
-    for watch in sorted(watches.values(), key=lambda d: version(d["runtime"]["version"]), reverse=True):
+    for watch in sorted(watches.values(), key=lambda d: version(d["runtime"]["version"])):
         for phone in phones.values():
             if version(phone["runtime"]["version"])[:2] == version(watch["runtime"]["version"])[:2]:
                 pair_id = simctl("pair", watch["udid"], phone["udid"])
