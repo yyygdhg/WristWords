@@ -91,7 +91,7 @@ CI 删除首次生成的工程并重新生成，比较两次结果，运行核�
 `app-build.yml` 保留工程重复生成、8 个核心测试、两个 Simulator Build、companion 检查和干净 checkout 检查，再执行 `scripts/simulator_smoke.py`。
 
 - 使用当前 Xcode 的 `simctl list --json` 查询实际安装的 Runtime、可用设备和配对信息。
-- 根据构建产物的最低系统版本动态选择可用配对，优先选择较早的兼容已安装 Runtime；不绑定型号、UDID 或 Xcode 安装路径。编译仍使用当前 Xcode/SDK。
+- 根据构建产物的最低系统版本动态选择可用配对，优先选择较新的兼容已安装 Runtime；不绑定型号、UDID 或 Xcode 安装路径。编译使用当前 Xcode/SDK。
 - 用 `simctl boot` 启动设备并打开当前 Xcode 的 Simulator 应用，再以流式日志的 `bootstatus -b` 等待启动；先分别 `install` 安装、`get_app_container` 确认两端安装完成，然后再 `launch` 启动 iPhone 和 Watch App，保证 WCSession 激活时两端环境已经准备好。
 - 两个 App 各观察 20 秒，检查原始启动 PID 仍是对应的 App 进程，并检查本次新生成的 App crash report。
 - 使用 `simctl io screenshot` 捕获两个实际屏幕；不修改 Stage 3 UI。
@@ -163,7 +163,7 @@ Keychain 不可用时显示错误，不退回明文存储；仍可输入凭证�
 
 首次 Runner 实测：46 个测试及两端 Build、安装、启动均通过；WCSession 报告 `isWatchAppInstalled = false`，所以**没有实际验证跨设备投递**，同步报告为 `not-verified`。此结果不计为同步 PASS；仍需实体配对设备验证。探测保留原生配对/安装检查，不修改 Simulator 注册数据库或注入 Watch 数据。
 
-后续两台 Runner 的 iOS 26.5 首次启动均在 CoreLocation 系统迁移阶段超过 6 分钟，App 尚未安装。为保持 CI 可运行，设备选择改为优先较早的兼容已安装 Runtime，仍保留动态选择、启动超时、安装/Launch、进程存活和崩溃检查；没有绕过系统迁移或修改 Simulator 数据库。
+Runner 冷启动可能耗时较长，单设备 `bootstatus` 最多等待 10 分钟，基础 Runtime 步骤最多 25 分钟。先准备并安装两端，再启动 App；仍保留动态选择、超时失败、安装/Launch、进程存活和崩溃检查，没有绕过系统迁移或修改 Simulator 数据库。
 
 若 Simulator 未激活配对传输或在 90 秒内没有投递，报告明确写 `not-verified`；基础 Runtime 和自动测试仍必须通过。收到错误内容、payload 被拒绝或 App 退出会让 CI 失败，不伪造成功。Apple 的[官方示例](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)要求使用实体 iPhone 和 Watch 测试，因此后台、断连后延迟投递和设备重启仍需真机验证。
 
