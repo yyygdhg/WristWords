@@ -165,6 +165,8 @@ Keychain 不可用时显示错误，不退回明文存储；仍可输入凭证�
 
 Runner 冷启动可能耗时较长，单设备 `bootstatus` 最多等待 10 分钟，基础 Runtime 步骤最多 25 分钟。先准备并安装两端，再启动 App；仍保留动态选择、超时失败、安装/Launch、进程存活和崩溃检查，没有绕过系统迁移或修改 Simulator 数据库。
 
+应用验证使用官方标准 `macos-26-intel` Runner，以避开实际观察到的 ARM64 Runner 容量不足；Stage 1 环境 Workflow 仍使用 `macos-latest`。公开仓库的这两种标准 Runner 均属于 [GitHub 免费托管环境](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)，不使用 larger 或 self-hosted Runner。
+
 若 Simulator 未激活配对传输或在 90 秒内没有投递，报告明确写 `not-verified`；基础 Runtime 和自动测试仍必须通过。收到错误内容、payload 被拒绝或 App 退出会让 CI 失败，不伪造成功。Apple 的[官方示例](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)要求使用实体 iPhone 和 Watch 测试，因此后台、断连后延迟投递和设备重启仍需真机验证。
 
 本阶段没有 Watch → iPhone 评价回传、凭证同步、Watch API 请求、历史数据库、正式 OAuth、签名或发布。
