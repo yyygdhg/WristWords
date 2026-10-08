@@ -92,7 +92,7 @@ CI 删除首次生成的工程并重新生成，比较两次结果，运行核�
 
 - 使用当前 Xcode 的 `simctl list --json` 查询实际安装的 Runtime、可用设备和配对信息。
 - 根据构建产物的最低系统版本动态选择可用配对，优先选择较早的兼容已安装 Runtime；不绑定型号、UDID 或 Xcode 安装路径。编译仍使用当前 Xcode/SDK。
-- 用 `simctl boot` 启动设备并打开当前 Xcode 的 Simulator 应用，再以流式日志的 `bootstatus -b` 等待启动；随后分别 `install` 安装、`get_app_container` 确认安装、`launch` 启动 iPhone 和 Watch App。
+- 用 `simctl boot` 启动设备并打开当前 Xcode 的 Simulator 应用，再以流式日志的 `bootstatus -b` 等待启动；先分别 `install` 安装、`get_app_container` 确认两端安装完成，然后再 `launch` 启动 iPhone 和 Watch App，保证 WCSession 激活时两端环境已经准备好。
 - 两个 App 各观察 20 秒，检查原始启动 PID 仍是对应的 App 进程，并检查本次新生成的 App crash report。
 - 使用 `simctl io screenshot` 捕获两个实际屏幕；不修改 Stage 3 UI。
 - 将 `iphone.png`、`watch.png`、Runtime/设备信息、运行报告及 App stdout/stderr 上传到 `simulator-runtime-<run id>-<attempt>` Artifact，保留 14 天。失败时也保留已产生的证据，Smoke Test 的错误不会被忽略。
