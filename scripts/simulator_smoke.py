@@ -104,7 +104,7 @@ def check_process(pid, executable):
         raise RuntimeError(f"App process {pid} is no longer running as {executable}: {result.stdout}")
 
 
-def validate_app(label, device, app):
+def prepare_app(label, device, app):
     info = app_info(app)
     bundle_id = info["CFBundleIdentifier"]
     REPORT["apps"][label] = {
@@ -115,11 +115,16 @@ def validate_app(label, device, app):
         simctl("boot", device["udid"], timeout=120, stream=True)
     developer_dir = Path(command("xcode-select", "-p"))
     command("open", "-a", developer_dir / "Applications/Simulator.app", stream=True)
-    simctl("bootstatus", device["udid"], "-b", timeout=360, stream=True)
+    simctl("bootstatus", device["udid"], "-b", timeout=600, stream=True)
     REPORT["apps"][label]["status"] = "installing"
     simctl("install", device["udid"], app, timeout=180)
     # Prove installation separately from the launch return value.
     simctl("get_app_container", device["udid"], bundle_id, "app")
+
+
+def validate_app(label, device, app):
+    info = app_info(app)
+    bundle_id = info["CFBundleIdentifier"]
     REPORT["apps"][label]["status"] = "launching"
     start = time.time()
     launched = simctl(
@@ -166,6 +171,10 @@ def main():
     pairs = json.loads(simctl("list", "pairs", "--json", show_output=False))["pairs"]
     if re.search(r"\bactive\b", pairs[pair_id].get("state", "")) is None:
         simctl("pair_activate", pair_id)
+    # WatchConnectivity starts with the Apps, so prepare both counterpart
+    # devices and installations before either App activates its WCSession.
+    prepare_app("iphone", phone, phone_app)
+    prepare_app("watch", watch, watch_app)
     validate_app("iphone", phone, phone_app)
     validate_app("watch", watch, watch_app)
     REPORT["status"] = "passed"

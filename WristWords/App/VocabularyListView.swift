@@ -3,6 +3,7 @@ import SwiftUI
 @MainActor
 struct VocabularyListView: View {
     @StateObject private var model = VocabularyListModel(tokenStore: KeychainTokenStore())
+    @StateObject private var watchSender = PhoneVocabularySender()
     @State private var tokenInput = ""
 
     var body: some View {
@@ -49,6 +50,14 @@ struct VocabularyListView: View {
                     .disabled(model.isLoading)
                 }
 
+                Section("Apple Watch") {
+                    Button("Send to Apple Watch") {
+                        watchSender.send(words: model.words)
+                    }
+                    .disabled(model.isLoading || model.errorMessage != nil)
+                    Text(watchSender.statusMessage).font(.caption)
+                }
+
                 Section("单词") {
                     ForEach(model.words) { word in
                         VStack(alignment: .leading, spacing: 4) {
@@ -64,7 +73,18 @@ struct VocabularyListView: View {
                 }
             }
             .navigationTitle("WristWords")
-            .task { await model.start() }
+            .task {
+                #if DEBUG && targetEnvironment(simulator)
+                if SimulatorSyncProbe.isEnabled {
+                    await model.start(source: SimulatorSyncProbe.Source())
+                    await SimulatorSyncProbe.run(sender: watchSender, words: model.words)
+                } else {
+                    await model.start()
+                }
+                #else
+                await model.start()
+                #endif
+            }
         }
     }
 }

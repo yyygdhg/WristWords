@@ -5,6 +5,7 @@
 - Stage 3 — local vocabulary review MVP
 - Stage 4 — Simulator runtime validation
 - Stage 5 — MaiMemo API integration
+- Stage 6 — iPhone to Watch vocabulary sync
 
 ```text
 Windows
@@ -90,8 +91,8 @@ CI 删除首次生成的工程并重新生成，比较两次结果，运行核�
 `app-build.yml` 保留工程重复生成、8 个核心测试、两个 Simulator Build、companion 检查和干净 checkout 检查，再执行 `scripts/simulator_smoke.py`。
 
 - 使用当前 Xcode 的 `simctl list --json` 查询实际安装的 Runtime、可用设备和配对信息。
-- 根据构建产物的最低系统版本动态选择可用配对，优先选择较新的已安装 Runtime；不绑定型号、UDID 或 Xcode 安装路径。
-- 用 `simctl boot` 启动设备并打开当前 Xcode 的 Simulator 应用，再以流式日志的 `bootstatus -b` 等待启动；随后分别 `install` 安装、`get_app_container` 确认安装、`launch` 启动 iPhone 和 Watch App。
+- 根据构建产物的最低系统版本动态选择可用配对，优先选择较新的兼容已安装 Runtime；不绑定型号、UDID 或 Xcode 安装路径。编译使用当前 Xcode/SDK。
+- 用 `simctl boot` 启动设备并打开当前 Xcode 的 Simulator 应用，再以流式日志的 `bootstatus -b` 等待启动；先分别 `install` 安装、`get_app_container` 确认两端安装完成，然后再 `launch` 启动 iPhone 和 Watch App，保证 WCSession 激活时两端环境已经准备好。
 - 两个 App 各观察 20 秒，检查原始启动 PID 仍是对应的 App 进程，并检查本次新生成的 App crash report。
 - 使用 `simctl io screenshot` 捕获两个实际屏幕；不修改 Stage 3 UI。
 - 将 `iphone.png`、`watch.png`、Runtime/设备信息、运行报告及 App stdout/stderr 上传到 `simulator-runtime-<run id>-<attempt>` Artifact，保留 14 天。失败时也保留已产生的证据，Smoke Test 的错误不会被忽略。
@@ -137,3 +138,35 @@ Keychain 不可用时显示错误，不退回明文存储；仍可输入凭证�
 - Keychain 流程的单元测试使用内存 Stub；iPhone 编译使用系统 Security 框架的真实 Keychain 实现。
 - CI 继续从干净 checkout 生成工程、执行测试、编译两端、检查 companion、实际安装/启动 Simulator 并截图，始终使用 Mock。Artifact 仅包含 CI 的 Mock 画面及运行证据。
 - 真实请求成功、账号权限、个人释义内容和本机 Keychain 行为需要用户手动粘贴凭证后最终验证；当前自动测试不等于真实 API 已验证成功。
+
+## iPhone → Watch 单向词汇同步
+
+点击 iPhone 的 **Send to Apple Watch**，发送页面当前已经加载的 `[VocabularyWord]`；来源可以是 Mock 或 MaiMemo API，Watch 不需要知道来源。加载中或请求失败时不发送列表。
+
+### 传输与生命周期
+
+- 使用 Apple 官方 [WatchConnectivity](https://developer.apple.com/documentation/watchconnectivity/wcsession) 的 `updateApplicationContext`，传送完整的最新词汇快照。系统替换尚未投递的旧快照并安排后台传输，不要求 Watch 当前可达或保持前台。
+- 快照用 Codable JSON 编码为 Data，放入 property-list 兼容的 context。只包含 `version`、`transferID` 以及单词的 `id`、`term`、`phonetic`、`meaning`；没有 Token、Keychain、Authorization Header 或数据源对象。
+- iPhone 等待 WCSession 激活，并检查配对及 Watch App 安装状态。成功提交只显示“已提交，等待 Watch 接收”，不冒充已经送达；没有 Watch 或提交失败显示简单反馈。
+- Watch 在 App 初始化时激活并保留 WCSession delegate，在激活后读取 `receivedApplicationContext`，并处理新 context 的 delegate 回调。解码与界面状态更新在主线程完成。
+- 每次新的有效快照重新创建 StudySession，从 `1 / N` 开始；相同 transferID 的重复投递不会重置已有进度。评价、完成和 Restart 保留。
+- 尚无同步数据时使用原有 Mock fallback。有效空列表显示等待新单词；无效 JSON、字段、重复 ID 或未知格式保留当前 Session，不 Crash。
+- 不自行持久化单词或评价，只利用系统的最新 received context 在后续启动时恢复词汇列表。学习进度仍在内存中。
+
+### CI 验证及真机边界
+
+46 个测试保留 Stage 5 的全部 30 个测试，新增单词/快照编码、多个字段及 Unicode、property-list 传输、空列表、无效 payload、字段白名单、Watch Session 创建、重复投递、数据替换与背词 Restart 测试。
+
+现有 XcodeGen、两端 Build、companion、Runtime 和干净 checkout 验证继续保留。额外的 `simulator_sync_smoke.py` 在已经启动的配对 Simulator 中重新启动两端，iPhone 通过同一发送方法传送**顺序反转的 5 个 Mock 单词**，Watch 必须通过真实 WCSession 接收；脚本不直接给 Watch 注入词汇。
+
+此探测只在 Debug Simulator 且带 `--wristwords-sync-smoke` 参数时启用，不进行 API 请求。它比较两端的 transferID、数量和首词 ID，生成 `sync-runtime-report.json`、`iphone-sync.png` 与 `watch-sync.png`，一并上传已有 Runtime Artifact；报告与截图仅包含 CI Mock 数据。
+
+首次 Runner 实测：46 个测试及两端 Build、安装、启动均通过；WCSession 报告 `isWatchAppInstalled = false`，所以**没有实际验证跨设备投递**，同步报告为 `not-verified`。此结果不计为同步 PASS；仍需实体配对设备验证。探测保留原生配对/安装检查，不修改 Simulator 注册数据库或注入 Watch 数据。
+
+Runner 冷启动可能耗时较长，单设备 `bootstatus` 最多等待 10 分钟，基础 Runtime 步骤最多 25 分钟。先准备并安装两端，再启动 App；仍保留动态选择、超时失败、安装/Launch、进程存活和崩溃检查，没有绕过系统迁移或修改 Simulator 数据库。
+
+应用验证使用官方标准 `macos-26-intel` Runner，以避开实际观察到的 ARM64 Runner 容量不足；Stage 1 环境 Workflow 仍使用 `macos-latest`。公开仓库的这两种标准 Runner 均属于 [GitHub 免费托管环境](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)，不使用 larger 或 self-hosted Runner。
+
+若 Simulator 未激活配对传输或在 90 秒内没有投递，报告明确写 `not-verified`；基础 Runtime 和自动测试仍必须通过。收到错误内容、payload 被拒绝或 App 退出会让 CI 失败，不伪造成功。Apple 的[官方示例](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)要求使用实体 iPhone 和 Watch 测试，因此后台、断连后延迟投递和设备重启仍需真机验证。
+
+本阶段没有 Watch → iPhone 评价回传、凭证同步、Watch API 请求、历史数据库、正式 OAuth、签名或发布。

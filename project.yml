@@ -21,6 +21,7 @@ targets:
       - WristWords/App
       - WristWords/Data
       - WristWords/Credentials
+      - WristWords/Sync
       - WristWords/Resources
       - Shared
     settings:
@@ -51,6 +52,8 @@ targets:
     platform: watchOS
     sources:
       - WristWordsWatch/App
+      - WristWordsWatch/Study
+      - WristWordsWatch/Sync
       - WristWordsWatch/Resources
       - Shared
     settings:
@@ -75,6 +78,7 @@ targets:
       - Shared
       - WristWords/Data
       - Tests
+      - WristWordsWatch/Study
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.example.WristWords.coretests
