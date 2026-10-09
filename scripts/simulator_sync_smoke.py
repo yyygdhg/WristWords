@@ -70,6 +70,14 @@ def main(report):
         if received["wordCount"] != 5 or received["firstWordID"] != "approach":
             raise RuntimeError("Unexpected reordered Mock vocabulary in Watch session")
         report.update(status="passed", reason="Real WCSession delivery and new Watch StudySession confirmed")
+    # Apple explicitly documents transferUserInfo and didReceiveUserInfo as
+    # unsupported in Simulator. Keep the actual Stage 6 probe above, without
+    # synthesizing Watch ratings or pretending a host-injected event was delivered.
+    report["studyResultSync"] = {
+        "status": "not-verified",
+        "reason": "Apple documents transferUserInfo/didReceiveUserInfo as unsupported in Simulator; paired physical devices required",
+    }
+    print("Watch to iPhone study results: not-verified (transferUserInfo is unsupported in Simulator)", flush=True)
     for label, app in [("iphone", phone), ("watch", watch)]:
         simctl("io", app["udid"], "screenshot", OUTPUT / (label + "-sync.png"))
     print("WatchConnectivity Simulator probe: " + report["status"] + " — " + report["reason"], flush=True)
@@ -78,6 +86,7 @@ def main(report):
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with Path(summary).open("a", encoding="utf-8") as stream:
+            stream.write("\nWatch to iPhone study results: **not-verified** — transferUserInfo requires paired physical devices.\n")
             stream.write("\nWatchConnectivity Simulator: **" + report["status"] + "** — " + report["reason"] + ".\n")
 
 

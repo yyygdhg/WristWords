@@ -52,6 +52,12 @@ struct ReviewView: View {
                         model.restart()
                     }
                 }
+                if let message = model.resultSyncMessage {
+                    Text(message).font(.caption2).multilineTextAlignment(.center)
+                }
+                if !model.pendingResults.isEmpty {
+                    Button("Retry result sync") { model.retryPendingResults() }
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 8)
