@@ -6,6 +6,7 @@
 - Stage 4 — Simulator runtime validation
 - Stage 5 — MaiMemo API integration
 - Stage 6 — iPhone to Watch vocabulary sync
+- Stage 7 — Watch to iPhone study result sync
 
 ```text
 Windows
@@ -37,14 +38,18 @@ Swift 测试文件仅在 CI 临时目录生成，运行结束后清理。
 | WristWordsCoreTests | macOS 核心逻辑测试 | 14.0 | `com.example.WristWords.coretests` |
 
 ```text
-Shared/                    单词、MockVocabulary、StudySession 与三种评价
-WristWords/App/            iPhone App 入口与单词列表
+Shared/                    单词、StudySession、Snapshot 与学习事件编解码
+WristWords/App/            iPhone 单词列表、凭证入口与 Watch Results
+WristWords/Data/           数据源、列表状态与内存中的 Watch Results
+WristWords/Sync/           iPhone WCSession delegate
 WristWordsWatch/App/       Watch App 入口与背词页面
-Tests/                    StudySession 的 XCTest 测试
+WristWordsWatch/Study/     学习状态与待排队事件
+WristWordsWatch/Sync/      Watch WCSession delegate 与后台任务完成
+Tests/                    核心逻辑、API Fixture、双向同步的 XCTest 测试
 project.yml               三个 Target 的源码归属、设置与 Scheme
 ```
 
-Session 是值类型，由 Watch 页面的 SwiftUI `@State` 保存。评价结果仅在该 Session 的内存中，Restart 清空结果；没有持久化、学习调度算法或两端同步。
+StudySession 仍是值类型，由 WatchStudyModel 保存。Restart 清空当前背词结果并建立新的 Session ID，已产生的待传输事件继续保留。iPhone 接收结果仅存于当前 App 运行周期的内存；没有历史数据库或学习调度算法。
 测试 Target 直接编译相同的 Shared 源码，在 macOS Runner 上测试核心逻辑，无需为单元测试启动 iPhone 或 Watch 模拟器。
 
 Watch 使用现代单 Target App 结构，设置 `WKApplication` 与 `WKCompanionAppBundleIdentifier`，作为 iPhone App 的 companion 嵌入 `PlugIns`，同时允许独立运行。
@@ -169,4 +174,41 @@ Runner 冷启动可能耗时较长，单设备 `bootstatus` 最多等待 10 分�
 
 若 Simulator 未激活配对传输或在 90 秒内没有投递，报告明确写 `not-verified`；基础 Runtime 和自动测试仍必须通过。收到错误内容、payload 被拒绝或 App 退出会让 CI 失败，不伪造成功。Apple 的[官方示例](https://developer.apple.com/documentation/watchconnectivity/transferring-data-with-watch-connectivity)要求使用实体 iPhone 和 Watch 测试，因此后台、断连后延迟投递和设备重启仍需真机验证。
 
-本阶段没有 Watch → iPhone 评价回传、凭证同步、Watch API 请求、历史数据库、正式 OAuth、签名或发布。
+Stage 6 的范围不包含评价回传；Stage 7 的增量见下文。凭证同步、Watch API 请求、历史数据库、正式 OAuth、签名和发布仍未实现。
+
+## Stage 7 — Watch to iPhone study result sync
+
+### 学习事件与 Snapshot 关联
+
+Watch 对收到的词汇点击“忘记 / 模糊 / 认识”时，先执行原 StudySession 的评价与下一词，再生成一个 `StudyResultEvent`：
+
+- `version = 1`、独立的 UUID `id`：同一事件重试时保留相同 ID。
+- `transferID`：原 `VocabularySnapshot.transferID`，关联下发批次。
+- `sessionID`：本次背词的 UUID；收到新 Snapshot 或点击 Restart 时更新，重复接收同一 Snapshot 不更新。
+- `sequence`：本次 Session 内从 1 开始的评价顺序。
+- `result`：复用现有 `StudyResult`，仅有 `wordID` 和 `StudyRating`。传输评级代码为 `forgotten` / `uncertain` / `known`，界面保留中文。
+
+没有收到 iPhone Snapshot 时，Mock fallback 继续正常背词，评价只留在 Watch，不虚构下发批次。
+
+### 后台排队与接收
+
+复用两端原 WCSession 生命周期和 delegate，不建立第二个 WCSession。iPhone delegate 在 App 初始化时激活，支持接收后台启动时的事件；Watch 完成系统 WatchConnectivity 后台任务，避免悬挂的后台任务耗尽运行预算。
+
+每条事件编码成 JSON Data，放在 property-list 兼容的 user-info 字典中，使用 Apple 官方 [`transferUserInfo`](https://developer.apple.com/documentation/watchconnectivity/wcsession/transferuserinfo(_:)) 独立排队。该机制保留多条事件并在 App 挂起后继续传输，不要求 iPhone 此刻可达；原单词同步继续使用 `updateApplicationContext`。
+
+尚未激活 WCSession 时，事件暂存在 Watch 内存，连接激活后再入系统队列；只在调用系统排队 API 后移出内存待发列表，不取消旧事件。系统完成回调报错时保留同一事件供 `Retry result sync`、后续评价或连接激活重试。状态只说明“已排队，等待 iPhone 接收”，不将排队视为收到。
+
+iPhone 的 [`didReceiveUserInfo`](https://developer.apple.com/documentation/watchconnectivity/wcsessiondelegate/session(_:didreceiveuserinfo:)) 回调切回 MainActor，在 `WatchResultsModel` 中解码与记录。先按事件 UUID 去重，再拒绝同一 Session/序号的冲突事件及 Session 跨 Snapshot 的异常关联。已知 Snapshot 还检查序号与单词位置匹配；无效、未知版本或冲突数据不改变已有结果。
+
+iPhone 的 **Watch Results** 按 Snapshot 分组，显示单词、评价、Session ID 和序号；每个 Session 按序号排列，延迟到达的旧批次不混入新批次。当前运行周期已发送的 Snapshot 用于解析单词拼写；iPhone 重启后收到旧批次事件时单独分组，缺少本地词表便显示 wordID。
+
+### 测试、Simulator 与保存边界
+
+- 共 72 个自动测试：保留 Stage 1～6 的 46 个，新增 26 个。覆盖三种评级与 Unicode、JSON/property-list 编解码、字段白名单、异常与未知版本、批次/Session/顺序关联、多事件、重复与冲突拒绝、延迟与乱序事件、Restart，以及未就绪/部分排队/失败重试时保留事件。
+- Core Tests 使用固定数据与注入的排队闭包，不调用真实墨墨 API 或真实 WatchConnectivity。CI 继续使用 Mock，Artifact 不包含真实用户数据或凭证。
+- 保留工程重生成、两端 Build、companion、两端 Simulator Boot/Install/Launch、截图和干净 checkout 检查，以及 Stage 6 的实际 WCSession Snapshot probe。
+- Apple 官方文档明确表示 Simulator 不支持 `transferUserInfo`，且不调用 `didReceiveUserInfo`。Stage 7 在 `sync-runtime-report.json` 的 `studyResultSync` 与 Actions Summary 中明确记录 **not-verified**，不注入结果、不改 Simulator 数据库、不把单元测试或系统入队冒充真实跨设备成功。跨设备回传请用实体配对 iPhone + Watch 验证。
+- iPhone 已收到结果和去重记录只在本次运行周期中保存；App 关闭后不恢复历史记录。Watch 尚未移交系统的待发事件和显式传输失败后的重试列表也仅在内存；强制结束 App 时这部分不保证恢复。已移交的后台传输由系统管理，短暂断连时不主动丢弃或取消。
+- 真机仍需验证：前台评价回传、连续多词、iPhone 不可达后的延迟投递、后台唤醒、失败重试、Restart、新 Snapshot 与旧批次的交错到达。App 重启历史恢复与长期持久化留待后续阶段。
+
+本阶段不写回墨墨、不修改学习进度，不传 Token / Keychain / Authorization Header，不引入数据库、SRS、OAuth、签名或发布。

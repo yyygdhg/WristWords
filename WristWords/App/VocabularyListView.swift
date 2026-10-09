@@ -3,7 +3,7 @@ import SwiftUI
 @MainActor
 struct VocabularyListView: View {
     @StateObject private var model = VocabularyListModel(tokenStore: KeychainTokenStore())
-    @StateObject private var watchSender = PhoneVocabularySender()
+    @ObservedObject var watchSender: PhoneVocabularySender
     @State private var tokenInput = ""
 
     var body: some View {
@@ -57,6 +57,8 @@ struct VocabularyListView: View {
                     .disabled(model.isLoading || model.errorMessage != nil)
                     Text(watchSender.statusMessage).font(.caption)
                 }
+
+                WatchResultsView(model: watchSender.resultsModel)
 
                 Section("单词") {
                     ForEach(model.words) { word in

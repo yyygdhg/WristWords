@@ -3,6 +3,7 @@ import SwiftUI
 @main
 @MainActor
 struct WristWordsWatchApp: App {
+    @WKApplicationDelegateAdaptor(WatchConnectivityBackgroundDelegate.self) private var backgroundDelegate
     @StateObject private var model: WatchStudyModel
     private let receiver: WatchVocabularyReceiver
 

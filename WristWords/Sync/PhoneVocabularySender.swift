@@ -6,8 +6,10 @@ import WatchConnectivity
 final class PhoneVocabularySender: NSObject, ObservableObject, WCSessionDelegate {
     @Published private(set) var statusMessage = "正在连接 Apple Watch…"
     private(set) var failureReason = "activating"
+    let resultsModel: WatchResultsModel
 
     override init() {
+        resultsModel = WatchResultsModel()
         super.init()
         guard WCSession.isSupported() else {
             failureReason = "unsupported"
@@ -27,6 +29,7 @@ final class PhoneVocabularySender: NSObject, ObservableObject, WCSessionDelegate
             // No reachability guard: the system can deliver the latest context
             // later, when the Watch is not currently in the foreground.
             try WCSession.default.updateApplicationContext(context)
+            resultsModel.register(snapshot)
             failureReason = ""
             statusMessage = "已提交 \(words.count) 个单词，等待 Watch 接收。"
             return snapshot.transferID
@@ -92,6 +95,12 @@ final class PhoneVocabularySender: NSObject, ObservableObject, WCSessionDelegate
         Task { @MainActor [weak self] in
             self?.failureReason = "inactive"
             self?.statusMessage = "Watch 连接正在切换，请稍后重试。"
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        Task { @MainActor [weak self] in
+            self?.resultsModel.receive(userInfo)
         }
     }
 
